@@ -69,6 +69,9 @@ def run(market, enso_table, spec, decide=alpha.decide, ledger=None):
     orders = positions.copy()                # contract counts wanted after the next fill
     decision = None                          # the latest weekly decision (a dict)
     margin_active = False
+    # A spec may ask for a decision every k-th week instead of every week.
+    rebalance_weeks = getattr(spec, "rebalance_weeks", 1)
+    weeks_seen = 0
 
     rows = []
     for t in range(market.start, len(dates)):
@@ -130,6 +133,9 @@ def run(market, enso_table, spec, decide=alpha.decide, ledger=None):
 
         # 5. Weekly decision, from returns up to and including today.
         decided_today = is_decision_day(dates, t, market.start)
+        if decided_today:
+            decided_today = weeks_seen % rebalance_weeks == 0
+            weeks_seen += 1
         if decided_today:
             decision = decide(spec, returns[: t + 1], enso_states[t], assets)
             orders, margin_active = alpha.whole_contracts(

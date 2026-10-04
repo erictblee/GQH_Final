@@ -380,3 +380,91 @@ The test period is not pristine: see the disclosure in `XA_SPEC.md`.
 | 2026-10-03 | **Cross-asset mean not subtracted from the signal**, and **no turnover limit**: both explained in XA_SPEC.md. | Departures from the revision's text. |
 | 2026-10-03 | **Engines agree:** on development + validation, models 1 and 4 in backtrader match the pandas engine on every position and on daily returns to 15 decimal places (checked by hand). | Second implementation. |
 | 2026-10-03 | **Kit HTML report:** for the ENSO and cross-asset strategies its "Trades", "Win Rate" and "Trades Net P&L" cards now show position episodes (unbroken long or short stretches), not fills. The risk parity report is unchanged. | The cards were empty (W0/L0, $0.00). |
+
+## Fourth iteration: the A/B/C/D attribution experiment
+
+Added 2026-10-03. The plan is `ABCD_PLAN.md` (the team's text, unchanged).
+This section records how the plan was turned into code. **Everything down to
+"Results" was written and committed before the first run.** The third
+strategy (`XA_SPEC.md`, `run_xa.py`, models M1 to M4) is kept as it was, as
+the primary replication; nothing in it was changed.
+
+Universe, data, periods, roll rule, costs (2 bps per side, rolls on both
+legs), weekly rebalance, $10M, whole contracts, 12-month (252-day) trend,
+EWMA covariance (60-day half-life, 252-day window), 10% target, 2x-per-asset
+and 4x-gross limits: all taken over from `XA_SPEC.md` unchanged.
+
+### The four models
+
+| Model | Signal | Sizing |
+|---|---|---|
+| A Trend | `sign` of the 252-day compounded return: +1, -1, or 0 (no position) | Equal notional: `weight_i = signal_i / N`, longs + shorts = 1x equity. No volatility, no covariance, no leverage. |
+| B Trend + InvVol | as A | `q_i = signal_i / σ_i`, then scaled to 10% **as if every correlation were zero**: `q × 0.10 / sqrt(Σ q_i² σ_i²)`. |
+| C Trend + Covariance | as A | The same `q`, scaled with the full covariance: `q × 0.10 / sqrt(q'Σq)`. |
+| D Trend + ENSO + Covariance | as A, plus the ENSO overlay on ZC, ZS, ZW | as C |
+
+So A → B adds volatility information, B → C adds correlations (the two
+portfolios have the same shape and differ by one common factor each week),
+and C → D adds ENSO. The covariance is used only to scale. There is no
+optimizer and no risk-budget solver in these models, and no asset is forced
+to carry an equal or a signal-sized share of risk.
+
+### Choices the plan left open
+
+| Choice | What was done | Why |
+|---|---|---|
+| The old signal was a volatility-standardized score with a 0.25 dead zone and signal-sized risk budgets | Replaced, in A to D only, by the plain `sign` the plan writes (section 3). | The plan's formula. M1 to M4 keep the old one. |
+| How B is "normalized" | To the same 10% target as C, with correlations set to zero. | Then B and C differ in exactly one thing: whether correlations are used. |
+| A's size | 1x equity gross. | "Simple equal notional." Its volatility is whatever it turns out to be; Sharpe ratios are still comparable. |
+| ENSO in Model D | The existing additive form, on the existing table (`config.ENSO_EFFECT`): `signal = trend + effect`. On a +1/-1 trend this means: double the grain position when ENSO agrees with the trend, close it when ENSO disagrees, unchanged when ENSO has no view. | Plan section 4: "preserve [the current formulation] for the primary replication". |
+| The overlay form, tested separately | `D_mult_overlay`: `signal = trend × 1.5` when ENSO agrees, `× 0.5` when it disagrees. It never flips or closes a position. | Plan section 4's preferred form. The two numbers are round, symmetric and chosen before any run; they are not fitted. |
+| "The historical relationship must be measured" | The report shows each grain's own return in each ENSO state, and the grains' P&L in every separate ENSO stretch. The table of effects itself is **not** re-estimated from prices. | Fitting it on this sample would be the full-sample estimation section 15 forbids. |
+| No-trade band | Not implemented. | Optional in the plan; it would be a new free parameter. |
+| Maximum risk contribution per asset | Not a separate limit. The 2x position limit and the 4x gross limit apply after scaling. | With sign signals every asset's standalone risk is equal by construction; risk shares are reported. |
+| "OOS Sharpe" column | The validation period (2017 to 2019). | The test period (2020 to 2024-09) is still locked and not downloaded; unlocking it is the team's decision. |
+| "Trades" | Position episodes (one unbroken long or short stretch in one market), as in the 277 of the plan's section 19. Fills are reported as well. | A weekly resize is not a trade one can win or lose. |
+
+### Runs fixed in advance
+
+| Group | Runs |
+|---|---|
+| The four models | `A_trend`, `B_trend_invvol`, `C_trend_cov`, `D_trend_enso_cov` |
+| Overlay form | `D_mult_overlay` |
+| Diversification (section 13) | `A_grains`: Model A on ZC, ZS, ZW only, against `A_trend` |
+| Long/short (section 13) | `A_long_only`, `A_grains_long_only`, `C_long_only`: a negative signal means no position |
+| ENSO test (section 14) | Grains only, Model C's sizing: `grains_trend`, `grains_enso_only`, `grains_trend_enso` |
+| Robustness of D (section 16) | trend 126 and 189 days; covariance half-life 40 and 90 days; volatility target 8% and 12%; rebalance every 2 weeks; cost 4 bps |
+
+Robustness runs are reported, never selected from.
+
+### Known limits
+
+- **ENSO values are today's version, not the version published at the
+  time** (NOAA publishes no vintages of this file). Timing is point-in-time
+  (a month's value is used from the 15th of the next month); later revisions
+  to a value cannot be undone. The 30-year z-score is rolling, so it uses no
+  future months. Plan section 4 asks for unrevised data; this is the one
+  place it is not met.
+- The old agriculture-only strategy ran on 2021-12 to 2024-09. Here the
+  grains-only runs use 2011 to 2019, so they are a like-for-like comparison
+  with Model A, not a re-run of the old result.
+- The backtrader kit has not been given these models; only the pandas
+  engine runs them. The engine itself is the one already checked against
+  backtrader, with one addition (an optional "every k-th week" rebalance,
+  off by default).
+
+### Files and how to run
+
+| File | What it does |
+|---|---|
+| `ABCD_PLAN.md` | The plan. |
+| `config.py` ("A/B/C/D" section) | The settings that are new. |
+| `src/abcd_alpha.py` | Signal and sizing of the models. |
+| `src/ag_metrics.py` (end) | Annual P&L, monthly distribution, market-by-market table. |
+| `run_abcd.py` | Runs everything above; writes `results/ABCD_REPORT.md`. |
+| `tests/test_abcd.py` | Tests on fake data. |
+
+```bash
+python run_abcd.py                # development + validation only
+python run_abcd.py --test         # locked: needs the test data and the team's go-ahead
+```

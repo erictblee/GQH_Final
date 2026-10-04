@@ -250,6 +250,28 @@ XA_MAX_WEIGHT = 2.0                 # one asset's notional may not exceed 2x equ
 XA_ROBUST_LOOKBACKS = [126]         # 6-month trend, as a robustness test only
 
 # ---------------------------------------------------------------------------
+# A/B/C/D attribution models (ABCD_PLAN.md)
+#
+# The same eleven futures, data, periods, roll rule, costs, weekly rebalance,
+# trend lookback, EWMA covariance, 10% target and position limits as the
+# cross-asset section above. Only what is new is listed here. Every number
+# was written down before the first run of these models.
+# ---------------------------------------------------------------------------
+
+ABCD_EQUAL_GROSS = 1.0              # Model A: longs + shorts add up to 1x equity, no leverage
+# The ENSO overlay as a multiplier on the grains' trend (plan section 4),
+# tested separately from the additive form: lean in when ENSO agrees with
+# the trend, lean out when it disagrees, never flip or close the position.
+ABCD_ENSO_AGREE = 1.5
+ABCD_ENSO_DISAGREE = 0.5
+
+# Robustness of Model D, one setting changed at a time. Reported, never selected from.
+ABCD_ROBUST_LOOKBACKS = [126, 189]  # 6- and 9-month trend (the main one is 12)
+ABCD_ROBUST_HALF_LIVES = [40, 90]   # covariance half-life, days (the main one is 60)
+ABCD_ROBUST_VOL_TARGETS = [0.08, 0.12]
+ABCD_ROBUST_REBALANCE_WEEKS = [2]   # decide every second week instead of every week
+
+# ---------------------------------------------------------------------------
 # Folders
 # ---------------------------------------------------------------------------
 

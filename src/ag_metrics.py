@@ -129,3 +129,84 @@ def position_episodes(daily, assets):
                          "first_day": days.index[0].date(), "last_day": days.index[-1].date(),
                          "days": len(days), "pnl": float(days[f"pnl_{a}"].sum())})
     return pd.DataFrame(rows, columns=["asset", "direction", "first_day", "last_day", "days", "pnl"])
+
+
+# ---------------------------------------------------------------------------
+# Extra reports asked for by ABCD_PLAN.md section 12
+# ---------------------------------------------------------------------------
+
+def total_pnl(daily, assets, first=None, last=None):
+    """Dollars earned in the period, net of costs."""
+    part = daily.loc[first:last]
+    return float(part[[f"pnl_{a}" for a in assets]].to_numpy().sum())
+
+
+def annual_pnl(daily, assets):
+    """Dollars earned in each calendar year, net of costs."""
+    dollars = daily[[f"pnl_{a}" for a in assets]].sum(axis=1)
+    return dollars.groupby(daily.index.year).sum()
+
+
+def monthly_distribution(daily, first=None, last=None):
+    """The shape of the monthly returns: where the middle is, how wide they
+    spread and how bad the tails are."""
+    ret = daily.loc[first:last, "ret"]
+    monthly = (1.0 + ret).groupby(ret.index.to_period("M")).prod() - 1.0
+    return {
+        "months": len(monthly),
+        "mean": float(monthly.mean()),
+        "median": float(monthly.median()),
+        "std": float(monthly.std(ddof=1)),
+        "worst": float(monthly.min()),
+        "pct_5": float(monthly.quantile(0.05)),
+        "pct_25": float(monthly.quantile(0.25)),
+        "pct_75": float(monthly.quantile(0.75)),
+        "pct_95": float(monthly.quantile(0.95)),
+        "best": float(monthly.max()),
+        "skew": float(monthly.skew()),
+        "positive_months": float((monthly > 0).mean()),
+    }
+
+
+def episode_counts(daily, assets, first=None, last=None):
+    """Number of position episodes ("trades") in the period and the share
+    of them that made money."""
+    episodes = position_episodes(daily.loc[first:last], assets)
+    return {"episodes": len(episodes),
+            "win_rate": float((episodes["pnl"] > 0).mean()) if len(episodes) else float("nan")}
+
+
+def by_contract(daily, assets, first=None, last=None):
+    """Each futures market's part in the result. One row per asset.
+
+    Returns and volatility are of the stream this asset added to the
+    portfolio (its P&L net of its own costs, as a fraction of equity).
+    max_drawdown is the largest peak-to-trough fall of that stream's running
+    total, in the same units. "trades" are position episodes.
+    """
+    part = daily.loc[first:last]
+    episodes = position_episodes(part, assets)
+    total = total_pnl(part, assets)
+    rows = []
+    for a in assets:
+        leg = part[f"leg_{a}"]
+        mean = leg.mean() * config.TRADING_DAYS
+        vol = leg.std(ddof=1) * np.sqrt(config.TRADING_DAYS)
+        running = leg.cumsum()
+        fall = (running.cummax().clip(lower=0.0) - running).max()
+        own = episodes[episodes["asset"] == a]
+        pnl = float(part[f"pnl_{a}"].sum())
+        rows.append({
+            "asset": a,
+            "pnl_dollars": pnl,
+            "share_of_pnl": pnl / total if total != 0 else float("nan"),
+            "ann_return": float(mean),
+            "ann_vol": float(vol),
+            "sharpe": float(mean / vol) if vol > 0 else float("nan"),
+            "max_drawdown": float(fall),
+            "trades": len(own),
+            "win_rate": float((own["pnl"] > 0).mean()) if len(own) else float("nan"),
+            "long_pnl_dollars": float(own.loc[own["direction"] == "long", "pnl"].sum()),
+            "short_pnl_dollars": float(own.loc[own["direction"] == "short", "pnl"].sum()),
+        })
+    return pd.DataFrame(rows)

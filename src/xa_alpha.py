@@ -35,16 +35,16 @@ class XaSpec:
     integer_contracts: bool = True
 
 
-def ewma_cov(returns_so_far):
+def ewma_cov(returns_so_far, half_life=config.XA_HALF_LIFE):
     """Annualized covariance in which recent days count more.
 
-    A day that is `config.XA_HALF_LIFE` (60) days old counts half as much as
-    today, a day 120 days old a quarter as much, and so on. Only the last
+    A day that is `half_life` (60) days old counts half as much as today, a
+    day 120 days old a quarter as much, and so on. Only the last
     config.XA_COV_WINDOW (252) days are used.
     """
     window = np.asarray(returns_so_far)[-config.XA_COV_WINDOW:]
     age = np.arange(len(window))[::-1]              # 0 for the newest day
-    day_weights = 0.5 ** (age / config.XA_HALF_LIFE)
+    day_weights = 0.5 ** (age / half_life)
     # aweights tells numpy how much each day (row) counts.
     return np.cov(window, rowvar=False, aweights=day_weights) * config.TRADING_DAYS
 
