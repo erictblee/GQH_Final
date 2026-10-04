@@ -1,0 +1,23 @@
+# --- Secrets: API keys must never be committed ---
+.env
+**/.env
+
+# --- Market data must never be committed (raw or processed, real or synthetic).
+#     Other files in data/ (download.py, DATA_FINGERPRINT.txt, DOWNLOAD_DATE.txt) ARE tracked. ---
+data/raw/
+data/processed/
+data/raw_ag/
+data/processed_ag/
+data/raw_xa/
+data/processed_xa/
+# Public third-party files (FRED, Kenneth French); re-download with data/download_external.py
+data/external/
+
+# --- Run outputs ---
+results/
+
+# --- Housekeeping (not project files) ---
+__pycache__/
+.pytest_cache/
+.venv/
+.DS_Store
