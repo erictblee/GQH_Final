@@ -468,3 +468,92 @@ Robustness runs are reported, never selected from.
 python run_abcd.py                # development + validation only
 python run_abcd.py --test         # locked: needs the test data and the team's go-ahead
 ```
+
+### Results (first and only run, 2026-10-03)
+
+Development + validation, 2011-06 to 2019-12. The full tables are in
+`results/ABCD_REPORT.md` (not committed; `python run_abcd.py` rebuilds it).
+The first six columns are the whole run. "OOS Sharpe" is the validation
+period, 2017 to 2019: **the test and final periods are still locked.**
+
+| Model | CAGR | Vol | Sharpe | Max DD | Trades | Costs | Development Sharpe | OOS Sharpe (validation) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A Trend | -0.4% | 7.9% | -0.01 | 23.1% | 261 | $334,225 | 0.25 | -0.58 |
+| B Trend + InvVol | 2.1% | 12.7% | 0.23 | 28.4% | 261 | $831,788 | 0.44 | -0.14 |
+| C Trend + Covariance | 3.1% | 10.5% | 0.34 | 23.9% | 261 | $821,545 | 0.56 | -0.06 |
+| D Trend + ENSO + Covariance | 4.2% | 10.6% | 0.44 | 20.2% | 264 | $863,054 | 0.60 | 0.15 |
+
+Every model's 95% interval for the Sharpe ratio includes zero (D, whole
+run: -0.16 to 1.04).
+
+What each layer adds, as a difference in Sharpe ratio with its 95% interval:
+
+| Step | Whole run | Development | Validation |
+|---|---|---|---|
+| Inverse volatility (B - A) | +0.24 (-0.04 to 0.51) | +0.19 (-0.15 to 0.53) | +0.44 (0.00 to 0.88) |
+| Covariance (C - B) | +0.11 (0.01 to 0.22) | +0.12 (-0.01 to 0.26) | +0.08 (-0.05 to 0.24) |
+| ENSO (D - C) | +0.10 (-0.05 to 0.25) | +0.04 (-0.13 to 0.22) | +0.22 (-0.02 to 0.47) |
+| ENSO as a multiplier (D_mult - C) | +0.04 (-0.03 to 0.11) | +0.01 (-0.08 to 0.10) | +0.11 (-0.01 to 0.23) |
+| Diversification (A on 11 markets - A on grains) | +0.52 (-0.11 to 1.11) | +0.63 (-0.12 to 1.41) | +0.29 (-0.57 to 1.09) |
+| Shorting, Model C (long/short - long-only) | -0.10 (-0.61 to 0.39) | +0.18 (-0.47 to 0.83) | -0.62 (-1.40 to 0.09) |
+| Grains alone: trend + ENSO - trend | +0.23 (-0.05 to 0.51) | +0.05 (-0.28 to 0.36) | +0.57 (0.14 to 1.09) |
+
+### Conclusion
+
+1. **Does cross-asset trend work?** Not shown. Plain equal-notional trend
+   (A) broke even over the whole run and lost in validation. With
+   volatility sizing the models made money in development (Sharpe 0.44 to
+   0.60) and roughly nothing in validation (-0.14 to 0.15). In every model
+   the profit came from being long stocks, short natural gas and long
+   bonds; all three grains lost money in all four models.
+2. **Does volatility scaling help?** Probably. B beat A in both periods
+   (+0.19, +0.44), and the interval only just includes zero. But B ignores
+   correlations, so it ran at 12.7% volatility against a 10% target and
+   had the deepest drawdown (28.4%).
+3. **Does covariance help?** Yes, modestly and consistently. C holds B's
+   positions and only rescales them, and that brought realized volatility
+   to 10.5%, cut the drawdown from 28.4% to 23.9% and raised the Sharpe
+   ratio by about 0.1 in both periods, at the same cost. Changing the
+   covariance half-life to 40 or 90 days changes nothing (0.45, 0.43).
+4. **Does ENSO add incremental information?** Suggestive, not established.
+   D beat C by +0.10 over the whole run with an interval that includes
+   zero; almost all of it came in validation. In the grains D beat C in
+   all five La Nina stretches (+$1.18M, of which $0.99M in two of them:
+   early 2012 and 2017-12 to 2018-05), and in three of six El Nino
+   stretches (-$0.13M in total), so the soybean El Nino rule added
+   nothing. There were only 227 La Nina days. Two further cautions: the
+   grain trend lost money throughout, so any rule that closes grain
+   positions would have helped; and the multiplier form, which never
+   closes a position, gained less than half as much (+0.04).
+5. **Which model should be carried forward?** C, as the simplest model
+   whose every layer earned its place in both periods, with D alongside it
+   as the pre-specified challenger. This is not a choice by Sharpe ratio:
+   D's is higher, but its edge over C cannot be told apart from chance.
+   Nothing is changed in response to these results: the grains stay in,
+   the 252-day lookback stays, shorting stays (long-only C did as well or
+   better here, 0.45 against 0.34, but 2011 to 2019 was a rising market
+   for stocks and bonds, and the difference is well inside its interval).
+6. **What should be tested next on untouched data?** Run A to D exactly as
+   they are on the locked test period (2020-01 to 2024-09,
+   `python run_abcd.py --test`). It contains the three-year La Nina of
+   2020 to 2023 and the El Nino of 2023 to 2024, which is the independent
+   ENSO variation this sample lacks. The questions, fixed now: is C's
+   Sharpe ratio positive; is C - B still positive; is D - C positive, and
+   does it come from the grains in La Nina; does the 4 bps run stay
+   positive. Then one run of the final period.
+
+Other observations:
+
+- **Robustness of D** (whole-run Sharpe 0.44): 126-day trend 0.35; 189-day
+  0.27; half-life 40 and 90 days 0.45 and 0.43; 8% and 12% targets 0.44;
+  every two weeks 0.36; 4 bps 0.37. All positive and in the same direction,
+  none distinguishable from zero. The result is most sensitive to the trend
+  lookback.
+- **Compared with the earlier M4** (`run_xa.py`: +63.2%, Sharpe 0.575 over
+  the same days): D made +42.8% at 0.44. The plain `sign` signal with equal
+  standalone risk did worse here than M4's signal-sized risk budgets. Both
+  are reported; neither is selected on that basis.
+- **Costs** took about 9 points of D's 52.3% gross return ($863k), a little
+  over half of it rolls.
+- **Win rate**: about one position in three made money in every model
+  (31.8% to 34.1%), as expected of trend following.

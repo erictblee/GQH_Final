@@ -288,10 +288,13 @@ def main():
             "", "The grains' P&L in dollars during each unbroken stretch of one ENSO state, "
                 "without ENSO (C), with it (D) and with the multiplier form:",
             "", markdown_table(dollars(episodes, ["grain_pnl_C", "grain_pnl_D", "grain_pnl_D_mult", "D_minus_C"])),
-            "", f"Stretches in which D's grains beat C's: {(episodes['D_minus_C'] > 0).sum()} of "
-                f"{(episodes['D_minus_C'] != 0).sum()} in which ENSO changed anything "
-                f"({len(episodes)} stretches in total; in a neutral stretch D and C differ only through the "
-                "portfolio-wide scaling and rounding)."]
+            ""]
+    for state in ["la_nina", "el_nino"]:
+        part = episodes[episodes["state"] == state]
+        out += [f"- {state}: D's grains beat C's in {(part['D_minus_C'] > 0).sum()} of {len(part)} stretches; "
+                f"D minus C adds up to ${part['D_minus_C'].sum():,.0f}."]
+    out += ["", "In a neutral stretch D and C differ only through positions carried over from the stretch "
+                "before, the portfolio-wide scaling and rounding."]
 
     # --- Section 12: yearly P&L, monthly distribution, market by market ---
     yearly = pd.DataFrame({spec.name: ag_metrics.annual_pnl(results[spec.name], m.assets) for spec in MODELS})
